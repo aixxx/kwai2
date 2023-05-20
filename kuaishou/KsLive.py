@@ -52,7 +52,25 @@ class Tool:
         liveUrl = self.liveUrl.strip('/')
         st = liveUrl.split('/')
         st = st[len(st) - 1]
-        res = requests.get(url=liveUrl, headers=self.headers)
+        head = {
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+            "Accept-Encoding": "gzip, deflate, br",
+            "Accept-Language": "zh-CN,zh;q=0.9",
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "Cookie": "did=web_cca46e80f72def855e56afb9fc63bf10c0ed; kuaishou.live.bfb1s=3e261140b0cf7444a0ba411c6f227d88; clientid=3; client_key=65890b29; kpn=GAME_ZONE; ksliveShowClipTip=true; showFollowRedIcon=1; needLoginToWatchHD=1; did=web_34ba4bbe410438768fadd1e94fab8120",
+            "Host": "live.kuaishou.com",
+            "Pragma": "no-cache",
+            "Sec-Fetch-Dest": "document",
+            "Sec-Fetch-Mode": "navigate",
+            "Sec-Fetch-Site": "same-origin",
+            "Sec-Fetch-User": "?1",
+            "Upgrade-Insecure-Requests": "1",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36",
+            "sec-ch-ua-mobile": "?0",
+            "sec-ch-ua-platform": "macOS"
+        }
+        res = requests.get(url=liveUrl, headers=head)
         userTag = '$ROOT_QUERY.webLiveDetail({\"authToken\":\"\",\"principalId\":\"' + st + '\"})'
         ss = re.search(
             r'_STATE__=(.*?);\(function\(\)\{var s;\(s=document\.currentScript\|\|document\.scripts\[document\.scripts\.length-1]\)\.parentNode\.r',
