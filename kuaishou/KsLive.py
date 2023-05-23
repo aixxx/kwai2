@@ -7,7 +7,8 @@ import re
 import time
 import websocket
 import requests
-import hashlib
+import gzip
+import io
 
 from protobuf_inspector.types import StandardParser
 from google.protobuf import json_format
@@ -35,13 +36,14 @@ class Tool:
     # 直播网页地址
     liveUrl = ''
     # 公共请求头
+    # https://live.kuaishou.com/u/3x9c8br2yazf8z9
     headers = {
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
         "Accept-Encoding": "gzip, deflate, br",
         "Accept-Language": "zh-CN,zh;q=0.9",
         "Cache-Control": "no-cache",
         "Connection": "keep-alive",
-        "Cookie": "did=web_cca46e80f72def855e56afb9fc63bf10c0ed; kuaishou.live.bfb1s=3e261140b0cf7444a0ba411c6f227d88; clientid=3; client_key=65890b29; kpn=GAME_ZONE; ksliveShowClipTip=true; showFollowRedIcon=1; needLoginToWatchHD=1; did=web_34ba4bbe410438768fadd1e94fab8120",
+        "Cookie": "kuaishou.live.bfb1s=9b8f70844293bed778aade6e0a8f9942; clientid=3; did=web_c0fe377905bd0fc0715a11ffc61c620e; client_key=65890b29; kpn=GAME_ZONE; _did=web_242828627B5C528; did=web_47a23b06e37663cc5fe501eff23edb968fde; ksliveShowClipTip=true; didv=1684828176331; showFollowRedIcon=1; userId=3350967988; kuaishou.live.web_st=ChRrdWFpc2hvdS5saXZlLndlYi5zdBKgAREuTn7qOtqYFBkPMztR1DsH_ZAr4DuHfuhb7MsGBFPwxZihg6OiTX1eVb-saSW8OVzum-nkCf8gMXujgvF59s7wPyXjAvRej3daJj3tLWT4J63piEtL_c29qgN8IYkPAUprYXYhDubclMuSwsrKYtJzp8tXUieYfCsyep1Ki46kwcoDh7558nbk0F6qzmKr7WMmgFjDhhwI-Svpr3cZVVsaEoMRdS355EPfvO-WEFcOv_Ls2yIgz1sZ7_UGkUH4Ae0gWWmFQmmqVUP0QavvxOlcr-V-TBIoBTAB; kuaishou.live.web_ph=40a981fa9b27e0a313b19153be8cacba9849; userId=3350967988",
         "Host": "live.kuaishou.com",
         "Pragma": "no-cache",
         "Sec-Fetch-Dest": "document",
@@ -61,7 +63,7 @@ class Tool:
         self.liveUrl = liveUrl
         self.cookie = cookie
         self.headers['Referer'] = self.liveUrl
-        self.headers['cookie'] = self.cookie
+        # self.headers['cookie'] = self.cookie
 
     # 获取房间号
     def getLiveRoomId(self):
@@ -70,12 +72,14 @@ class Tool:
         st = st[len(st) - 1]
 
         res = requests.get(url=liveUrl, headers=self.headers)
+        print(res.text)
         userTag = '$ROOT_QUERY.webLiveDetail({\"authToken\":\"\",\"principalId\":\"' + st + '\"})'
         ss = re.search(
             r'_STATE__=(.*?);\(function\(\)\{var s;\(s=document\.currentScript\|\|document\.scripts\[document\.scripts\.length-1]\)\.parentNode\.r',
             res.text)
         text = ss.group(1)
         text = json.loads(text)
+        print(text)
         self.liveRoomId = text['liveroom']['liveStream']['id']
         if self.liveRoomId == '':
             raise RuntimeError('liveRoomId获取失败')
@@ -83,13 +87,16 @@ class Tool:
 
     # 获取直播websocket信息
     def getWebSocketInfo(self, liveRoomId):
-        res = requests.get("https://live.kuaishou.com/live_api/liveroom/websocketinfo?liveStreamId="+liveRoomId, headers=self.headers).json()
+        res = requests.get("https://live.kuaishou.com/live_api/liveroom/websocketinfo?liveStreamId=" + liveRoomId,
+                           headers=self.headers).json()
         return res
 
     # 启动websocket服务
     def wssServerStart(self):
         rid = self.getLiveRoomId()
+        print(rid)
         wssInfo = self.getWebSocketInfo(rid)
+        print(wssInfo)
         self.token = wssInfo['data']['token']
         self.webSocketUrl = wssInfo['data']['websocketUrls'][0]
         websocket.enableTrace(True)
@@ -122,7 +129,7 @@ class Tool:
 
         data = json_format.MessageToDict(wssPackage, preserving_proto_field_name=True)
         log = json.dumps(data, ensure_ascii=False)
-        # logging.warn('[onMessage] [无法解析的数据包⚠️]' + log)
+        logging.warn('[onMessage] [无法解析的数据包⚠️]' + log)
 
     def parseEnterRoomAckPack(self, message: bytes):
         scWebEnterRoomAck = SCWebEnterRoomAck()
@@ -140,7 +147,7 @@ class Tool:
         data = json_format.MessageToDict(scWebLiveWatchingUsers, preserving_proto_field_name=True)
         log = json.dumps(data, ensure_ascii=False)
         # logging.info('[parseSCWebLiveWatchingUsers] [不知道是啥的数据包🤷] [RoomId:' + self.liveRoomId + '] ｜ ' + log)
-        self.saveData(log)
+        # self.saveData(log)
         return data
 
     # 保存数据
@@ -152,6 +159,17 @@ class Tool:
         }
         api_url = self.funHost + "/api/v1.Autojs/saveForPc?kami=xx1001001"
         result = requests.post(url=api_url, data=log.encode('utf8'), headers=head)
+        logging.info('[saveData2]完成' + result.text)
+
+    # 保存数据
+    def saveData2(self, log):
+        head = {
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9',
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/107.0.0.0 Safari/537.36',
+            'content-type': 'application/json'
+        }
+        api_url = self.funHost + "/api/v1.Autojs/saveForPc2?kami=xx1001001"
+        result = requests.post(url=api_url, data=log.encode('utf8'), headers=head)
         logging.info('[saveData]完成' + result.text)
 
     # 直播间弹幕信息
@@ -160,7 +178,9 @@ class Tool:
         scWebFeedPush.ParseFromString(message)
         data = json_format.MessageToDict(scWebFeedPush, preserving_proto_field_name=True)
         log = json.dumps(data, ensure_ascii=False)
-        # logging.info('[parseFeedPushPack] [直播间弹幕🐎消息] [RoomId:' + self.liveRoomId + '] ｜ ' + log)
+        logging.info('[parseFeedPushPack] [直播间弹幕🐎消息] [RoomId:' + self.liveRoomId + '] ｜ ' + log)
+        if "commentFeeds" in data:
+            self.saveData2(log)
         return data
 
     def parseHeartBeatPack(self, message: bytes):
